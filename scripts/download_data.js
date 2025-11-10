@@ -6,46 +6,62 @@ import config from '../config.js';
 const convertBbox = (bbox) => [bbox[1], bbox[0], bbox[3], bbox[2]];
 
 const runQuery = async (query) => {
-  const res = await fetch("https://overpass-api.de/api/interpreter", {
-    "credentials": "omit",
-    "headers": {
-      "User-Agent": "SubwayBuilder-Patcher (https://github.com/piemadd/subwaybuilder-patcher)",
-      "Accept": "*/*",
-      "Accept-Language": "en-US,en;q=0.5"
-    },
-    "body": `data=${encodeURIComponent(query)}`,
-    "method": "POST",
-    "mode": "cors"
-  });
+  const maxRetries = 5;
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    const res = await fetch("https://overpass-api.de/api/interpreter", {
+      "credentials": "omit",
+      "headers": {
+        "User-Agent": "SubwayBuilder-Patcher (https://github.com/piemadd/subwaybuilder-patcher)",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.5"
+      },
+      "body": `data=${encodeURIComponent(query)}`,
+      "method": "POST",
+      "mode": "cors"
+    });
+    
+    if (res.status === 429) {
+      const waitTime = Math.pow(2, attempt) * 10000;
+      console.warn(`Too Many Requests! Waiting ${waitTime / 1000}s before retry...`);
+      await new Promise(r => setTimeout(r, waitTime));
+      attempt++;
+      continue;
+    }
 
-  if (!res.ok) {
-    console.log('Error fetching data, try again in ~30 seconds');
-    process.exit(1);
-  };
-
-  let finalData = null;
-
-  const parseStream = createParseStream();
-  Readable.fromWeb(res.body).pipe(parseStream);
-
-
-  // Listen for parsed objects
-  parseStream.on('data', (data) => {
-    finalData = data;
-  });
-
-  parseStream.on('error', (error) => {
-    console.error('Error parsing JSON stream:', error);
-    console.log('Error fetching data, try again in ~30 seconds');
-    process.exit(1);
-  });
-
-  await new Promise((resolve, reject) => {
-    parseStream.on('end', resolve);
-    parseStream.on('error', reject);
-  });
-
-  return finalData;
+    if (!res.ok) {
+      console.log(`Error fetching data (HTTP ${res.status}). Waiting 30s before retry...`);
+      await new Promise(r => setTimeout(r, 30000));
+      attempt++;
+      continue;
+    }
+  
+    let finalData = null;
+  
+    const parseStream = createParseStream();
+    Readable.fromWeb(res.body).pipe(parseStream);
+  
+  
+    // Listen for parsed objects
+    parseStream.on('data', (data) => {
+      finalData = data;
+    });
+  
+    parseStream.on('error', (error) => {
+      console.error('Error parsing JSON stream:', error);
+      console.log('Error fetching data, try again in ~30 seconds');
+      process.exit(1);
+    });
+  
+    await new Promise((resolve, reject) => {
+      parseStream.on('end', resolve);
+      parseStream.on('error', reject);
+    });
+  
+    return finalData;
+  }
+  console.log("Failed to fetch Overpass data after multiple attempts");
+  process.exit(1);
 };
 
 const getStreetName = (tags, preferLocale = 'en') => {
