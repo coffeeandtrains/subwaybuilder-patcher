@@ -153,6 +153,7 @@ out geom;
 */
 
 const fetchAllData = async (place) => {
+  if (fs.existsSync(`./raw_data/${place.code}`)) return;
   if (!fs.existsSync(`./raw_data/${place.code}`)) fs.mkdirSync(`./raw_data/${place.code}`);
 
   console.log(`Fetching ${place.name} (${place.code}) - May take a while`);
