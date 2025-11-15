@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import config from '../config.js';
+import fs from 'fs';
 
 console.log("Downloading map tiles");
 for(var place of config.places) {
